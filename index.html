@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rally Rasio Digital - Papan Interaktif</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0fdf4; /* Light green background */
+            background-image: radial-gradient(#bbf7d0 2px, transparent 2px);
+            background-size: 40px 40px;
+            overflow: hidden;
+            touch-action: manipulation; /* Prevent zoom on double tap for PID */
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1), inset 0 2px 0 rgba(255,255,255,0.5);
+            border: 4px solid #fff;
+        }
+
+        .btn-3d {
+            transition: all 0.15s ease;
+            box-shadow: 0 8px 0px 0px rgba(0,0,0,0.2);
+        }
+        .btn-3d:active {
+            transform: translateY(8px);
+            box-shadow: 0 0px 0px 0px rgba(0,0,0,0.2);
+        }
+
+        .slot-box {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .slot-filled {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background-color: #fef08a !important; /* Yellow-200 */
+            border-color: #eab308 !important; /* Yellow-500 */
+            color: #854d0e !important;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes spinFast {
+            0% { transform: scale(1); filter: blur(0px); }
+            50% { transform: scale(1.05); filter: blur(2px); }
+            100% { transform: scale(1); filter: blur(0px); }
+        }
+        .spinning-name {
+            animation: spinFast 0.1s infinite;
+        }
+
+        @keyframes pulseAlert {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .pulse-validation {
+            animation: pulseAlert 2s infinite;
+        }
+        .wheel-spin {
+            transition: transform 4s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .audio-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            border: 4px solid #3b82f6; /* blue-500 */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.2s;
+        }
+        .audio-btn:active {
+            transform: scale(0.9);
+        }
+    </style>
+</head>
+<body class="h-screen w-full flex items-center justify-center p-4">
+
+    <button id="btn-audio" class="audio-btn" onclick="AudioManager.toggleMute()" title="Nyalakan/Matikan Suara">🔇</button>
+
+    <div id="screen-setup" class="glass-panel w-full max-w-4xl p-8 md:p-12 text-center flex flex-col items-center">
+        <div class="inline-flex items-center justify-center p-4 bg-orange-100 rounded-full mb-6">
+            <span class="text-6xl">🍲</span>
+        </div>
+        <h1 class="text-4xl md:text-5xl font-black text-gray-800 mb-2 tracking-tight">Rally Rasio Digital</h1>
+        <h2 class="text-xl md:text-2xl font-bold text-orange-500 mb-8">Edisi Makan Bergizi Gratis (MBG)</h2>
+        
+        <p class="text-gray-600 mb-4 font-medium text-lg">Masukkan daftar nama siswa yang akan bermain (pisahkan dengan koma):</p>
+        <textarea id="student-names" class="w-full h-32 p-4 text-lg border-4 border-green-200 rounded-xl focus:border-green-500 focus:outline-none resize-none mb-8" placeholder="Contoh: Budi, Siti, Andi, Rara, Doni..."></textarea>
+        
+        <button onclick="startGame()" class="btn-3d bg-green-500 text-white font-bold text-2xl py-4 px-12 rounded-2xl border-4 border-green-600 hover:bg-green-400 w-full md:w-auto">
+            MULAI BERMAIN! 🚀
+        </button>
+    </div>
+
+    <div id="screen-spinner" class="glass-panel w-full max-w-3xl p-12 text-center flex-col items-center hidden">
+        <h2 class="text-3xl font-bold text-gray-700 mb-8">Siapa Agen Travel Digital selanjutnya?</h2>
+        
+        <div class="relative w-80 h-80 mx-auto mb-8">
+            <!-- Pointer (Jarum Roda) -->
+            <div class="absolute -top-4 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[15px] border-r-[15px] border-t-[30px] border-l-transparent border-r-transparent border-t-red-600 z-10 filter drop-shadow-md"></div>
+            <!-- Wheel Canvas -->
+            <canvas id="wheel-canvas" width="320" height="320" class="rounded-full shadow-xl border-4 border-orange-500 wheel-spin"></canvas>
+        </div>
+        
+        <div id="winner-display" class="text-4xl font-black text-orange-600 uppercase tracking-wider h-12 mb-6 transition-all duration-300 transform scale-0 opacity-0">
+            ???
+        </div>
+        
+        <button id="btn-spin" onclick="spinWheel()" class="btn-3d bg-orange-500 text-white font-bold text-3xl py-6 px-16 rounded-full border-4 border-orange-600 hover:bg-orange-400 w-full md:w-auto">
+            🎲 PUTAR RODA!
+        </button>
+    </div>
+
+    <div id="screen-game" class="glass-panel w-full max-w-5xl p-6 md:p-10 flex-col items-center hidden">
+        <div class="w-full flex justify-between items-center mb-6">
+            <div class="bg-blue-100 text-blue-800 px-6 py-2 rounded-full font-bold text-xl border-2 border-blue-300">
+                👤 Pemain: <span id="current-player-name" class="text-blue-600">Siti</span>
+            </div>
+            <div class="bg-green-100 text-green-800 px-6 py-2 rounded-full font-bold text-xl border-2 border-green-300">
+                Skor Kelas: <span id="class-score" class="text-green-600">0</span>
+            </div>
+        </div>
+
+        <!-- Question Box -->
+        <div class="bg-white border-4 border-gray-200 rounded-2xl p-6 md:p-8 w-full text-center shadow-sm mb-8 relative">
+            <div class="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-yellow-900 font-bold px-6 py-2 rounded-full border-4 border-white shadow-md text-lg">
+                Tantangan Rasio
+            </div>
+            <p id="question-text" class="text-2xl md:text-3xl font-bold text-gray-800 mt-4 leading-snug">
+                Di piring MBG terdapat 6 potong ayam goreng dan 3 butir telur rebus. Tentukan rasio paling sederhana ayam terhadap telur!
+            </p>
+            <div id="question-visual" class="text-5xl mt-6 tracking-[0.2em]">
+                🍗🍗🍗🍗🍗🍗 &nbsp; 🥚🥚🥚
+            </div>
+        </div>
+
+        <!-- Answer Slots -->
+        <div class="flex items-center justify-center gap-4 md:gap-8 mb-10 w-full">
+            <div id="slot-1" class="slot-box w-32 h-32 md:w-40 md:h-40 border-8 border-dashed border-gray-300 rounded-3xl flex items-center justify-center text-6xl font-black text-gray-300 bg-gray-50 cursor-pointer" onclick="clearSlot(1)">
+                ?
+            </div>
+            <div class="text-6xl font-black text-gray-400 pb-4">:</div>
+            <div id="slot-2" class="slot-box w-32 h-32 md:w-40 md:h-40 border-8 border-dashed border-gray-300 rounded-3xl flex items-center justify-center text-6xl font-black text-gray-300 bg-gray-50 cursor-pointer" onclick="clearSlot(2)">
+                ?
+            </div>
+        </div>
+
+        <!-- Number Pads for PID Touch (Better than drag/drop for large screens) -->
+        <div class="w-full text-center mb-6">
+            <p class="text-gray-500 font-semibold mb-4">Ketuk angka di bawah ini untuk mengisi kotak (atau ketuk kotak untuk menghapus):</p>
+            <div class="flex flex-wrap justify-center gap-4">
+                <button onclick="fillSlot(1)" class="btn-3d w-20 h-20 md:w-24 md:h-24 bg-white border-4 border-blue-400 rounded-2xl text-4xl font-black text-blue-600 hover:bg-blue-50 flex items-center justify-center">1</button>
+                <button onclick="fillSlot(2)" class="btn-3d w-20 h-20 md:w-24 md:h-24 bg-white border-4 border-blue-400 rounded-2xl text-4xl font-black text-blue-600 hover:bg-blue-50 flex items-center justify-center">2</button>
+                <button onclick="fillSlot(3)" class="btn-3d w-20 h-20 md:w-24 md:h-24 bg-white border-4 border-blue-400 rounded-2xl text-4xl font-black text-blue-600 hover:bg-blue-50 flex items-center justify-center">3</button>
+                <button onclick="fillSlot(4)" class="btn-3d w-20 h-20 md:w-24 md:h-24 bg-white border-4 border-blue-400 rounded-2xl text-4xl font-black text-blue-600 hover:bg-blue-50 flex items-center justify-center">4</button>
+                <button onclick="fillSlot(5)" class="btn-3d w-20 h-20 md:w-24 md:h-24 bg-white border-4 border-blue-400 rounded-2xl text-4xl font-black text-blue-600 hover:bg-blue-50 flex items-center justify-center">5</button>
+                <button onclick="fillSlot(6)" class="btn-3d w-20 h-20 md:w-24 md:h-24 bg-white border-4 border-blue-400 rounded-2xl text-4xl font-black text-blue-600 hover:bg-blue-50 flex items-center justify-center">6</button>
+            </div>
+        </div>
+
+        <button id="btn-validate" onclick="showValidationPhase()" class="btn-3d bg-blue-500 text-white font-bold text-2xl py-4 px-12 rounded-2xl border-4 border-blue-600 hover:bg-blue-400 w-full md:w-auto hidden mx-auto mt-4">
+            KUNCI JAWABAN 🔒
+        </button>
+    </div>
+
+    <div id="screen-validation" class="glass-panel w-full max-w-4xl p-12 text-center flex-col items-center hidden relative z-50">
+        <div class="text-8xl mb-6">🧑‍⚖️</div>
+        <h2 class="text-4xl font-black text-gray-800 mb-4">Waktunya Juri Validasi!</h2>
+        <p class="text-2xl text-gray-600 mb-10">Teman-teman di kelas, apakah jawaban <strong id="val-player-name" class="text-blue-600">Siti</strong> (<span id="val-answer" class="text-orange-500 font-black">2 : 1</span>) sudah tepat?<br>Tunjukkan jempol kalian! 👍 atau 👎</p>
+        
+        <button onclick="checkAnswer()" class="btn-3d pulse-validation bg-red-500 text-white font-black text-3xl py-6 px-16 rounded-full border-4 border-red-700 hover:bg-red-400 w-full md:w-auto">
+            CEK KEBENARAN SEKARANG!
+        </button>
+    </div>
+
+    <div id="overlay-result" class="fixed inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center hidden z-[100]">
+        <div id="result-box" class="bg-white p-12 rounded-3xl text-center transform scale-90 transition-transform duration-300">
+            <div id="result-icon" class="text-9xl mb-6">✅</div>
+            <h2 id="result-title" class="text-5xl font-black text-green-500 mb-4">LUAR BIASA!</h2>
+            <p id="result-message" class="text-2xl text-gray-600 mb-10">Rasio ayam terhadap telur adalah 2 : 1.</p>
+            <button onclick="nextPlayer()" class="btn-3d bg-blue-500 text-white font-bold text-2xl py-4 px-12 rounded-xl border-4 border-blue-600 hover:bg-blue-400 w-full">
+                PEMAIN SELANJUTNYA ⏭️
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Database Soal Etnomatematika & MBG
+        const questions = [
+            {
+                text: "Di piring MBG terdapat 6 potong ayam goreng dan 3 butir telur rebus. Tentukan rasio paling sederhana ayam terhadap telur!",
+                visual: "🍗🍗🍗🍗🍗🍗 &nbsp;&nbsp; 🥚🥚🥚",
+                ans1: 2, ans2: 1,
+                explanation: "Karena 6 dibagi 3 = 2, dan 3 dibagi 3 = 1."
+            },
+            {
+                text: "Siti menerima 4 kotak susu UHT dan 2 potong buah pisang. Sederhanakan rasio susu terhadap pisang!",
+                visual: "🥛🥛🥛🥛 &nbsp;&nbsp; 🍌🍌",
+                ans1: 2, ans2: 1,
+                explanation: "Sama-sama dibagi 2, sehingga menjadi 2 banding 1."
+            },
+            {
+                text: "Di Pantai Batukaras terdapat 8 papan selancar yang disewa oleh 4 orang wisatawan pemula. Tentukan rasio papan selancar terhadap wisatawan!",
+                visual: "🏄‍♂️🏄‍♂️🏄‍♂️🏄‍♂️🏄‍♂️🏄‍♂️🏄‍♂️🏄‍♂️ &nbsp;&nbsp; 🧑🧑🧑🧑",
+                ans1: 2, ans2: 1,
+                explanation: "Setiap 1 orang wisatawan mendapatkan 2 papan selancar."
+            },
+            {
+                text: "Ibu memasak sayur bayam, dengan rasio 3 mangkuk sayur untuk 9 potong tempe. Berapa rasio sederhananya (sayur : tempe)?",
+                visual: "🥗🥗🥗 &nbsp;&nbsp; 🧆🧆🧆🧆🧆🧆🧆🧆🧆",
+                ans1: 1, ans2: 3,
+                explanation: "Untuk setiap 1 mangkuk sayur, terdapat 3 potong tempe."
+            },
+            {
+                text: "Dermaga Green Canyon memiliki 2 perahu utama dan 6 pelampung keselamatan. Sederhanakan rasio perahu terhadap pelampung!",
+                visual: "🚤🚤 &nbsp;&nbsp; 🛟🛟🛟🛟🛟🛟",
+                ans1: 1, ans2: 3,
+                explanation: "Artinya setiap 1 perahu dilengkapi dengan 3 pelampung."
+            }
+        ];
+
+        // State Variables
+        let students = [];
+        let currentPlayer = "";
+        let currentQuestion = null;
+        let score = 0;
+        let answered1 = null;
+        let answered2 = null;
+
+        let currentWheelRotation = 0;
+        const wheelColors = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef'];
+
+        // DOM Elements
+        const screens = {
+            setup: document.getElementById('screen-setup'),
+            spinner: document.getElementById('screen-spinner'),
+            game: document.getElementById('screen-game'),
+            validation: document.getElementById('screen-validation'),
+            result: document.getElementById('overlay-result')
+        };
+
+        const AudioManager = {
+            isMuted: true, // Start muted until user clicks
+            isInitialized: false,
+            synths: {},
+            bgmPart: null,
+
+            async init() {
+                if (this.isInitialized) return;
+                await Tone.start();
+                this.isInitialized = true;
+                this.isMuted = false;
+                document.getElementById('btn-audio').innerText = "🔊";
+
+                // Setup Synthesizers
+                Tone.Destination.volume.value = -5;
+                
+                this.synths.click = new Tone.MembraneSynth().toDestination();
+                this.synths.tick = new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2 }).toDestination();
+                this.synths.tick.volume.value = -12;
+                
+                this.synths.win = new Tone.PolySynth(Tone.Synth).toDestination();
+                this.synths.correct = new Tone.PolySynth(Tone.Synth).toDestination();
+                this.synths.wrong = new Tone.AMSynth({
+                    harmonicity: 2.5,
+                    oscillator: { type: "sawtooth" },
+                    modulation: { type: "square" }
+                }).toDestination();
+                this.synths.wrong.volume.value = -5;
+
+                // BGM Setup (Cheerful Marimba/Pluck style loop)
+                this.synths.bgm = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: "triangle" },
+                    envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.5 }
+                }).toDestination();
+                this.synths.bgm.volume.value = -18;
+
+                const chords = [
+                    ["C4", "E4", "G4"], ["F3", "A3", "C4"],
+                    ["G3", "B3", "D4"], ["C4", "E4", "G4"]
+                ];
+                let chordIndex = 0;
+                this.bgmPart = new Tone.Loop(time => {
+                    if(!this.isMuted) {
+                        this.synths.bgm.triggerAttackRelease(chords[chordIndex], "8n", time);
+                        chordIndex = (chordIndex + 1) % chords.length;
+                    }
+                }, "4n");
+                
+                Tone.Transport.bpm.value = 110;
+                Tone.Transport.start();
+                this.bgmPart.start(0);
+            },
+            playClick() {
+                if (!this.isMuted && this.isInitialized) this.synths.click.triggerAttackRelease("C2", "16n");
+            },
+            playSpinTick() {
+                if(this.isMuted || !this.isInitialized) return;
+                let duration = 4000;
+                let elapsed = 0;
+                let interval = 30; // Starts fast
+                
+                const tick = () => {
+                    if(this.isMuted) return;
+                    this.synths.tick.triggerAttackRelease("C5", "32n");
+                    elapsed += interval;
+                    interval = 30 + Math.pow((elapsed / duration), 3) * 400; // Slows down matching CSS cubic-bezier
+                    if (elapsed < duration) {
+                        setTimeout(tick, interval);
+                    }
+                };
+                tick();
+            },
+            playWin() {
+                if (!this.isMuted && this.isInitialized) {
+                    const now = Tone.now();
+                    this.synths.win.triggerAttackRelease(["C4", "E4", "G4", "C5"], "2n", now);
+                }
+            },
+            playCorrect() {
+                if (!this.isMuted && this.isInitialized) {
+                    const now = Tone.now();
+                    this.synths.correct.triggerAttackRelease(["C5", "E5", "G5"], "8n", now);
+                    this.synths.correct.triggerAttackRelease(["E5", "G5", "C6"], "2n", now + 0.15);
+                }
+            },
+            playWrong() {
+                if (!this.isMuted && this.isInitialized) {
+                    this.synths.wrong.triggerAttackRelease("C2", "2n");
+                }
+            },
+            toggleMute() {
+                this.isMuted = !this.isMuted;
+                document.getElementById('btn-audio').innerText = this.isMuted ? "🔇" : "🔊";
+            }
+        };
+
+        // UI Helpers
+        function showScreen(screenName) {
+            Object.values(screens).forEach(s => {
+                if(s) {
+                    s.classList.remove('flex');
+                    s.classList.add('hidden');
+                }
+            });
+            screens[screenName].classList.remove('hidden');
+            screens[screenName].classList.add('flex');
+        }
+
+        // Initialize Game
+        function startGame() {
+            AudioManager.init();
+            AudioManager.playClick();
+
+            const input = document.getElementById('student-names').value;
+            // Provide default if empty
+            const defaultNames = "Budi, Siti, Rara, Anton, Dika, Nisa, Gilang";
+            const rawNames = input.trim() === "" ? defaultNames : input;
+            
+            students = rawNames.split(',').map(name => name.trim()).filter(name => name !== "");
+            
+            if(students.length === 0) return;
+            
+            drawWheel();
+            showScreen('spinner');
+        }
+
+        function drawWheel() {
+            const canvas = document.getElementById('wheel-canvas');
+            if(!canvas || students.length === 0) return;
+            const ctx = canvas.getContext('2d');
+            const cw = canvas.width;
+            const ch = canvas.height;
+            const cx = cw / 2;
+            const cy = ch / 2;
+            const radius = cw / 2;
+
+            ctx.clearRect(0, 0, cw, ch);
+            
+            const sliceAngle = (2 * Math.PI) / students.length;
+
+            for (let i = 0; i < students.length; i++) {
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                // Offset agar index 0 (potongan pertama) persis berada di posisi jam 12 (-PI/2)
+                const startAngle = -Math.PI/2 - (sliceAngle / 2) + (i * sliceAngle);
+                const endAngle = startAngle + sliceAngle;
+                ctx.arc(cx, cy, radius, startAngle, endAngle);
+                ctx.fillStyle = wheelColors[i % wheelColors.length];
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+
+                // Gambar Teks
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(startAngle + sliceAngle / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 20px Inter";
+                // Posisi teks ditarik sedikit ke dalam dari tepi lingkaran
+                ctx.fillText(students[i], radius - 25, 7); 
+                ctx.restore();
+            }
+        }
+
+        function spinWheel() {
+            const btn = document.getElementById('btn-spin');
+            const canvas = document.getElementById('wheel-canvas');
+            const winnerDisplay = document.getElementById('winner-display');
+            
+            AudioManager.playSpinTick();
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            winnerDisplay.classList.remove('scale-100', 'opacity-100');
+            winnerDisplay.classList.add('scale-0', 'opacity-0');
+
+            // Hitung putaran acak: (5 hingga 10 putaran penuh) + sudut acak
+            const extraSpins = Math.floor(Math.random() * 5) + 5;
+            const randomAngle = Math.floor(Math.random() * 360);
+            
+            const totalRotationDelta = (extraSpins * 360) + randomAngle;
+            currentWheelRotation += totalRotationDelta;
+            
+            // Terapkan animasi CSS transform
+            canvas.style.transform = `rotate(${currentWheelRotation}deg)`;
+            
+            // Tunggu hingga animasi selesai (4 detik, sesuai transisi CSS)
+            setTimeout(() => {
+                const normalizedRotation = currentWheelRotation % 360;
+                const sliceDegrees = 360 / students.length;
+                
+                // Menentukan potongan mana yang berada tepat di posisi jarum atas (0 derajat)
+                const topAngle = (360 - normalizedRotation) % 360;
+                const winningIndex = Math.floor(topAngle / sliceDegrees);
+                
+                currentPlayer = students[winningIndex];
+                
+                // Update tampilan pemenang
+                winnerDisplay.innerText = currentPlayer;
+                winnerDisplay.classList.remove('scale-0', 'opacity-0');
+                winnerDisplay.classList.add('scale-100', 'opacity-100');
+                
+                // Animasi warna teks pemenang
+                AudioManager.playWin();
+
+                winnerDisplay.style.color = '#dc2626'; // red-600
+                setTimeout(() => {
+                    winnerDisplay.style.color = '#ea580c'; // orange-600
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-50');
+                        setupGameRound();
+                    }, 1500);
+                }, 300);
+                
+            }, 4000); 
+        }
+
+        function setupGameRound() {
+            // Select random question
+            currentQuestion = questions[Math.floor(Math.random() * questions.length)];
+            
+            // Reset slots
+            answered1 = null;
+            answered2 = null;
+            updateSlotUI();
+            
+            // Update UI
+            document.getElementById('current-player-name').innerText = currentPlayer;
+            document.getElementById('question-text').innerHTML = currentQuestion.text;
+            document.getElementById('question-visual').innerHTML = currentQuestion.visual;
+            document.getElementById('btn-validate').classList.add('hidden');
+            
+            showScreen('game');
+        }
+
+        function fillSlot(num) {
+            AudioManager.playClick();
+            if (answered1 === null) {
+                answered1 = num;
+            } else if (answered2 === null) {
+                answered2 = num;
+            }
+            updateSlotUI();
+        }
+
+        function clearSlot(slotPos) {
+            AudioManager.playClick();
+            if (slotPos === 1) answered1 = null;
+            if (slotPos === 2) answered2 = null;
+            updateSlotUI();
+        }
+
+        function updateSlotUI() {
+            const s1 = document.getElementById('slot-1');
+            const s2 = document.getElementById('slot-2');
+            
+            // Update Slot 1
+            if (answered1 !== null) {
+                s1.innerText = answered1;
+                s1.classList.add('slot-filled');
+            } else {
+                s1.innerText = "?";
+                s1.classList.remove('slot-filled');
+            }
+
+            // Update Slot 2
+            if (answered2 !== null) {
+                s2.innerText = answered2;
+                s2.classList.add('slot-filled');
+            } else {
+                s2.innerText = "?";
+                s2.classList.remove('slot-filled');
+            }
+
+            // Show Kunci Jawaban if both filled
+            if (answered1 !== null && answered2 !== null) {
+                document.getElementById('btn-validate').classList.remove('hidden');
+                document.getElementById('btn-validate').classList.add('block');
+            } else {
+                document.getElementById('btn-validate').classList.add('hidden');
+                document.getElementById('btn-validate').classList.remove('block');
+            }
+        }
+
+        function showValidationPhase() {
+            AudioManager.playClick();
+            document.getElementById('val-player-name').innerText = currentPlayer;
+            document.getElementById('val-answer').innerText = `${answered1} : ${answered2}`;
+            showScreen('validation');
+        }
+
+        function checkAnswer() {
+            const isCorrect = (answered1 === currentQuestion.ans1 && answered2 === currentQuestion.ans2);
+            
+            const resultBox = document.getElementById('result-box');
+            const icon = document.getElementById('result-icon');
+            const title = document.getElementById('result-title');
+            const message = document.getElementById('result-message');
+            
+            screens.result.classList.remove('hidden');
+            screens.result.classList.add('flex');
+            
+            // Delay for modal pop animation
+            setTimeout(() => {
+                resultBox.classList.remove('scale-90');
+                resultBox.classList.add('scale-100');
+            }, 50);
+
+            if (isCorrect) {
+                AudioManager.playCorrect();
+                score += 10;
+                document.getElementById('class-score').innerText = score;
+                icon.innerText = "🎉";
+                title.innerText = "TEPAT SEKALI!";
+                title.className = "text-5xl font-black text-green-500 mb-4";
+                message.innerHTML = `Luar Biasa! ${currentQuestion.explanation}`;
+                fireConfetti();
+            } else {
+                AudioManager.playWrong();
+                icon.innerText = "🤔";
+                title.innerText = "OOPS, HAMPIR BENAR!";
+                title.className = "text-5xl font-black text-orange-500 mb-4";
+                message.innerHTML = `Jawaban yang tepat adalah <strong>${currentQuestion.ans1} : ${currentQuestion.ans2}</strong>.<br><span class="text-lg mt-2 inline-block">${currentQuestion.explanation}</span>`;
+            }
+        }
+
+        function fireConfetti() {
+            var duration = 3 * 1000;
+            var animationEnd = Date.now() + duration;
+            var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1000 };
+
+            function randomInRange(min, max) {
+                return Math.random() * (max - min) + min;
+            }
+
+            var interval = setInterval(function() {
+                var timeLeft = animationEnd - Date.now();
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+                var particleCount = 50 * (timeLeft / duration);
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+            }, 250);
+        }
+
+        function nextPlayer() {
+            AudioManager.playClick();
+            screens.result.classList.remove('flex');
+            screens.result.classList.add('hidden');
+            document.getElementById('result-box').classList.add('scale-90');
+            document.getElementById('result-box').classList.remove('scale-100');
+            
+            const winnerDisplay = document.getElementById('winner-display');
+            if(winnerDisplay) {
+                winnerDisplay.innerText = "???";
+                winnerDisplay.classList.remove('scale-100', 'opacity-100');
+                winnerDisplay.classList.add('scale-0', 'opacity-0');
+            }
+            showScreen('spinner');
+        }
+
+    </script>
+</body>
+</html>
